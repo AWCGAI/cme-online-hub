@@ -47,6 +47,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── DEBUG: return last generated BRIEF ────────────────────────────────────────
+let _lastBrief = null;
+app.get('/debug/brief', (req, res) => {
+  if (!_lastBrief) return res.json({ brief: null, message: 'No generation yet this session' });
+  res.type('text/plain').send(_lastBrief);
+});
+
 // ── FILE TEXT EXTRACTION ──────────────────────────────────────────────────────
 async function extractFileText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -442,6 +449,7 @@ app.post('/generate', upload.array('files', 20), async (req, res) => {
   try {
     const result = await generateBrief(allContent);
     briefText = result.briefText;
+    _lastBrief = briefText;   // store for /debug/brief
     console.log(`Brief generated: ${result.brief.slides.length} slides`);
   } catch (err) {
     console.error('Brief generation failed:', err.message);
