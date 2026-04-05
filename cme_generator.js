@@ -1336,7 +1336,10 @@ function googleImagesUrl(searchString) {
     .replace(/^site:[^\s]+\s*/i, '')   // remove site: operator
     .replace(/site:[^\s]+\s*/gi, '')   // remove any other site: operators
     .trim();
-  return "https://www.google.com/search?q=" + encodeURIComponent(cleaned) + "&tbm=isch";
+  // Note: "&tbm=isch" omitted — the "&" would be encoded as "&amp;" by pptxgenjs
+  // in the rels XML, which violates OPC spec and triggers PowerPoint's repair dialog.
+  // Plain search URL (no "&") is valid and the user can switch to Images tab manually.
+  return "https://www.google.com/search?q=" + encodeURIComponent(cleaned + " photos");
 }
 
 // Image placeholder helper
