@@ -2,16 +2,20 @@
  * CME Online Hub — Express Server
  * Collaborate Middle East PowerPoint Generator — Web Deployment
  *
- * POST /generate   → Accepts free-text brief, returns .pptx download
+ * POST /generate   → Accepts files + text content, returns .pptx download
  * GET  /health     → Health check for Railway
  */
 
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
+const express    = require('express');
+const path       = require('path');
+const fs         = require('fs');
 const { execFile } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
-const Anthropic = require('@anthropic-ai/sdk');
+const Anthropic  = require('@anthropic-ai/sdk');
+const multer     = require('multer');
+const mammoth    = require('mammoth');
+const XLSX       = require('xlsx');
+const pdfParse   = require('pdf-parse');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -32,10 +36,67 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(__dirname));
 
+// ── MULTER (memory storage, 50MB limit) ───────────────────────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ── FILE TEXT EXTRACTION ──────────────────────────────────────────────────────
+async function extractFileText(file) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const name = file.originalname;
+
+  try {
+    // Word documents
+    if (ext === '.docx' || ext === '.doc') {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      return `[Document: ${name}]\n${result.value}`;
+    }
+
+    // PDF
+    if (ext === '.pdf') {
+      const result = await pdfParse(file.buffer);
+      return `[PDF: ${name}]\n${result.text}`;
+    }
+
+    // Excel / CSV
+    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+      const wb = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheets = wb.SheetNames.map(sheetName => {
+        const ws = wb.Sheets[sheetName];
+        return `Sheet "${sheetName}":\n` + XLSX.utils.sheet_to_csv(ws);
+      });
+      return `[Spreadsheet: ${name}]\n${sheets.join('\n\n')}`;
+    }
+
+    // Plain text / Markdown
+    if (ext === '.txt' || ext === '.md') {
+      return `[Text file: ${name}]\n${file.buffer.toString('utf8')}`;
+    }
+
+    // PowerPoint — note it but can't extract without additional parser
+    if (ext === '.pptx' || ext === '.ppt') {
+      return `[PowerPoint: ${name} — uploaded as reference. Use the paste field to describe what to generate based on this presentation.]`;
+    }
+
+    // Images — note them for context
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      return `[Image: ${name} — uploaded as visual reference.]`;
+    }
+
+    // Fallback: attempt UTF-8 text read
+    return `[File: ${name}]\n${file.buffer.toString('utf8')}`;
+
+  } catch (err) {
+    return `[File: ${name} — could not extract text: ${err.message}]`;
+  }
+}
 
 // ── SLIDE TYPE SCHEMA (injected into Haiku system prompt) ──────────────────────
 const SLIDE_SCHEMA = `
@@ -213,80 +274,17 @@ We have worked with global and regional brands including:
 
 ---
 
-## CASE STUDIES & PROJECTS
-
-### Year of the Camel (2024) — Madinah, KSA
-Saudi Arabia designated 2024 as the Year of the Camel. For Madinah, we developed a three-month interactive museum exhibit housed at the Madinah Arts Centre. Our scope covered narrative writing, design, interactive content creation, immersive storytelling and a spectacular 4D camel riding simulation. The live experience was brought to life by poets, artists and highly trained local guides.
-
-### Madinah Climate Experience
-An immersive touring visitor attraction that tells a global-scale story of the earth's climate system at risk from human inaction. Proposed at the scale of a global expo pavilion, it transports visitors into the climate system to witness its power, wonder and magnitude across the world's atmosphere and biomes.
-
-### Al-Qaswa Museum — Celebrating Prophet Muhammad's Journey into Madinah
-A permanent exhibit to enrich and expand Madinah's cultural value beyond the Year of the Camel and far into the future. This engaging, immersive exhibit takes visitors on a journey from the camel's prehistoric origins to the present day, emphasising its contribution to human civilisation and the challenges camels face today.
-
-### Arabian Cultural Village — A Cultural Centre for Experimental Storytelling
-A hub for Madinah that tells the Quba Story and educates visitors about the City Living Museum. An immersive storytelling experience to mark the start of the City Living Museum visitor journey. Reimagined as an experimental venue to test future CLM content, with detailed analysis of engagement both qualitative and quantitative informing future planning.
-
-### CLM Visitor Centre — City Living Museum, Quba Avenue, Madinah
-Creating a master hub connecting all CLM locations, experiences and commerce; providing a preview to the wonders that await around the city. A multifunctional exhibition, event and information space; a venue for history, culture and a home for live activations. The launching point for Madinah visitor exploration and business partner development.
-
-### CLM Modular Architecture — Simplicity and Flexibility for Experiential Architecture
-Creation of a unique experience architecture language for Madinah. For speed, scalability and quality control, we implemented a programme of offsite manufacture of modular units that can be arranged, rearranged and repurposed on other sites. The aim is to simplify thought processes around structure and architectural language and provide a dynamic and flexible platform to grow with demand.
-
-### Madinah Hospitality Offer — A Cultural Hospitality Offer Unique to a City
-Developing a Madinah must-have hospitality offer and product suite. Launching at CLM cafes and expanding to country, region and world. A self-funding long-term plan with economic benefit to Madinah at its core. Product development, packaging, advertising, social engagement and hospitality space design.
-
-### Annual Pavilion Programme — A Meditation on the Future of Mosques
-A new concept that focuses on the future of architecture, mosques and urbanism. It delivers international exposure for Madinah, public engagement, a potential conference subject and a lasting legacy. An annual programme to bring the Islamic world's best architects and thinkers to Madinah to create space for debate and imagination.
-
-### Speedweek Riyadh 2024
-Fusing the rich tapestry of Saudi culture with incredible cars and cutting-edge technology. An event merging the exhilaration of speed with the depths of emotion, crafting an unforgettable sensory journey. The experience synchronised heartbeats with the roar of engines, projected onto a monumental screen.
-
-### Smart Madinah Visitor Experience
-To showcase the ambitious plans of Madinah to become a leading Smart City, we developed an adaptable, digital-first space to bring stakeholders, partners and the general public together. The geometry and fluidity of the dynamic ribbon linking multiple spaces and experiences was generated via the motion capture of a leading Saudi calligraffiti artist.
-
-### AUDI — Capturing Tomorrow, Saudi Arabia
-Brief: conceptualise and execute a deeply localised production shoot showcasing the Audi brand in Saudi Arabia. Saudi Arabia is a Kingdom that embraces its cultural past while progressing towards a brighter tomorrow — the same sentiment encapsulates Audi's view of past and future. The shoot captured shared values around sustainability, design, digitalisation and performance.
-
-### JD x Nike Retail Conference
-Challenge: reinvigorate flagging Nike sales across the JD Sport retail estate. Creative idea: "Win Together" — a bespoke JD x Nike brand experience in celebratory party style, to showcase the brand's innovation and design to assembled JD retail leaders. External projections on a Manchester landmark, video walls, celebrity DJs, custom product spaces and interactive elements.
-
-### Qiddiya — The Place to Play (Concept)
-Bringing Qiddiya's thrilling entertainment to football fans through football-inspired games that capture the city's excitement. Featuring a power kick challenge, football mini-footgolf, a 360-degree selfie experience at the peak of Qiddiya's iconic Falcon rollercoaster. A taste of what's to come when the full Qiddiya entertainment district opens.
-
----
-
-## UNIQUE TOOLS WE EMPLOY
-
-### HADI — AI Cultural Guide for KSA & GCC
-HADI is an AI-powered personal guide that maximises engagement for visitors to the KSA and GCC. A trip to Madinah ranks among the highlights of life for people who arrive from all around the Islamic world. HADI is a guide that understands a visitor's interests, needs, time and budgetary restrictions, and gets to know them better through a series of meaningful and relevant dialogues.
-
-HADI features:
-- Personalised AMP story discovery before arrival
-- Chat-based contextual guidance on arrival
-- Choice of guide persona (age and gender customisable for maximum relatability)
-- Stories on Markets, Agriculture, Companions Stories, Water & Wells, Quba Mosque, and more
-- Contextual familiarity: your guide speaks to you with personalised understanding
-
-### Emotional Digital
-Screenless digital experiences that create profound emotional connections. One example: an interactive carpet installation where the pattern — a map of the city — awakens at a visitor's touch, with lights rippling across it down avenues and dissipating. A sense of being somewhere we've always been going.
-
-### Live Digital — Irresistible Theatre
-Live experiences offering extraordinary possibilities for digital interaction. Blending screens, devices and physical experiences to create irresistible theatre. When spectacular experiences are combined with breathtaking sound, the best lighting and special effects, audiences are emotionally affected. Irresistible theatre drives sharing which drives memory.
-
----
-
 ## LEADERSHIP TEAM
 
-**Ben McMahon** — Global CEO & Founder — ben@collaborateglobal.com
-**Nick Walsh** — Client Experience Director — nick@collaborateglobal.com
-**Andrew Walker** — Chief Creative Officer — andrew@collaborateglobal.com
-**Natassha Evans** — Head of Client Experience — natassha@collaborateglobal.com
-**Ewan Ferrier** — Creative Director — ewan@collaborateglobal.com
-**Hamad Tariq Mahmoud** — Saudi Cultural Lead — hamid@collaborateglobal.com
-**Hamsa Amjed** — Global Consultant — hamsa@collaborateglobal.com
-**Ross Oxenham** — Chief Expansion Officer — ross@collaborateglobal.com
-**Abdulrahman Alrashidi** — Agency Manager — abdulrahman@collaborateglobal.com
+**Ben McMahon** — Global CEO & Founder
+**Nick Walsh** — Client Experience Director
+**Andrew Walker** — Chief Creative Officer
+**Natassha Evans** — Head of Client Experience
+**Ewan Ferrier** — Creative Director
+**Hamad Tariq Mahmoud** — Saudi Cultural Lead
+**Hamsa Amjed** — Global Consultant
+**Ross Oxenham** — Chief Expansion Officer
+**Abdulrahman Alrashidi** — Agency Manager
 
 ---
 
@@ -405,25 +403,36 @@ function buildPptx(briefText) {
   });
 }
 
-// ── GENERATE ENDPOINT ─────────────────────────────────────────────────────────
-app.post('/generate', async (req, res) => {
-  const { content } = req.body;
-
-  if (!content || content.trim().length < 10) {
-    return res.status(400).json({ error: 'Please provide content to convert into a presentation.' });
-  }
+// ── GENERATE ENDPOINT (multipart + JSON fallback) ─────────────────────────────
+app.post('/generate', upload.array('files', 20), async (req, res) => {
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY environment variable is not set.' });
   }
 
-  console.log(`[${new Date().toISOString()}] Generating brief for content (${content.length} chars)`);
+  // Extract text from each uploaded file
+  const fileTexts = [];
+  if (req.files && req.files.length > 0) {
+    for (const file of req.files) {
+      const extracted = await extractFileText(file);
+      fileTexts.push(extracted);
+    }
+  }
+
+  // Combine with pasted content
+  const pastedContent = (req.body.content || '').trim();
+  const allContent = [...fileTexts, pastedContent].filter(Boolean).join('\n\n---\n\n');
+
+  if (allContent.length < 10) {
+    return res.status(400).json({ error: 'Please provide content — upload a file or paste some text.' });
+  }
+
+  console.log(`[${new Date().toISOString()}] Generating: ${req.files ? req.files.length : 0} file(s), ${pastedContent.length} chars pasted`);
 
   let briefText, outputPath;
 
   try {
-    // Step 1: Generate BRIEF via Haiku
-    const result = await generateBrief(content);
+    const result = await generateBrief(allContent);
     briefText = result.briefText;
     console.log(`Brief generated: ${result.brief.slides.length} slides`);
   } catch (err) {
@@ -432,7 +441,6 @@ app.post('/generate', async (req, res) => {
   }
 
   try {
-    // Step 2: Build the .pptx
     outputPath = await buildPptx(briefText);
     console.log(`PPTX built: ${outputPath}`);
   } catch (err) {
@@ -440,8 +448,11 @@ app.post('/generate', async (req, res) => {
     return res.status(500).json({ error: `PPTX build failed: ${err.message}` });
   }
 
-  // Step 3: Stream the file then clean up
-  res.download(outputPath, 'collaborate-me-presentation.pptx', (err) => {
+  // Determine filename for download
+  const requestedName = (req.body.filename || '').trim().replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const downloadName  = (requestedName || 'collaborate-middle-east-presentation') + '.pptx';
+
+  res.download(outputPath, downloadName, (err) => {
     try { fs.unlinkSync(outputPath); } catch (_) {}
     if (err && !res.headersSent) {
       console.error('Download error:', err.message);
