@@ -350,20 +350,11 @@ function buildPptx(briefText) {
     const runnerPath = `/tmp/run_${runId}.js`;
     const outputPath = `/tmp/cg_output_${runId}.pptx`;
 
-    // Read the generator source
-    const generatorSource = fs.readFileSync(GENERATOR_PATH, 'utf8');
+    // Read the full generator source
+    let source = fs.readFileSync(GENERATOR_PATH, 'utf8');
 
-    // Find the cut point — everything before the BRIEF comment
-    const BRIEF_MARKER = '// BRIEF — EDIT THIS SECTION TO PRODUCE A NEW DECK';
-    const cutIndex = generatorSource.indexOf(BRIEF_MARKER);
-    if (cutIndex === -1) {
-      return reject(new Error('Could not find BRIEF marker in cme_generator.js'));
-    }
-
-    let engineCode = generatorSource.slice(0, cutIndex);
-
-    // Override the hardcoded paths
-    engineCode = engineCode
+    // Patch hardcoded paths wherever they appear
+    source = source
       .replace(
         'const ASSETS_DIR = "/home/claude/cme_assets"',
         `const ASSETS_DIR = ${JSON.stringify(ASSETS_DIR)}`
@@ -373,11 +364,24 @@ function buildPptx(briefText) {
         `const OUTPUT_PATH = ${JSON.stringify(outputPath)}`
       );
 
-    // Build the runner: engine + new BRIEF + buildDeck call
-    const runner = engineCode +
-      `\n// BRIEF — EDIT THIS SECTION TO PRODUCE A NEW DECK\n` +
-      `const BRIEF = ${briefText};\n\n` +
-      `buildDeck(BRIEF);\n`;
+    // Replace the BRIEF object in-place so buildDeck (defined after it) stays intact.
+    // Find: const BRIEF = { ... }
+    // Replace up to (but not including) the buildDeck(BRIEF) call line.
+    const briefStart = source.indexOf('const BRIEF = ');
+    const callLine   = source.indexOf('\nbuildDeck(BRIEF)');
+
+    if (briefStart === -1) {
+      return reject(new Error('Could not find "const BRIEF" in cme_generator.js'));
+    }
+    if (callLine === -1) {
+      return reject(new Error('Could not find "buildDeck(BRIEF)" call in cme_generator.js'));
+    }
+
+    // Stitch: everything before BRIEF + new BRIEF + everything from buildDeck(BRIEF) onward
+    const runner =
+      source.slice(0, briefStart) +
+      `const BRIEF = ${briefText};\n` +
+      source.slice(callLine + 1); // +1 skips the leading \n
 
     fs.writeFileSync(runnerPath, runner, 'utf8');
 
