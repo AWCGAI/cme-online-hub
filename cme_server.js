@@ -360,7 +360,7 @@ function buildPptx(briefText) {
         `const ASSETS_DIR = ${JSON.stringify(ASSETS_DIR)}`
       )
       .replace(
-        'const OUTPUT_PATH = "/home/claude/cg_output.pptx"',
+        'const OUTPUT_PATH = "/home/claude/cme_output.pptx"',
         `const OUTPUT_PATH = ${JSON.stringify(outputPath)}`
       );
 
