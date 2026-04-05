@@ -124,12 +124,12 @@ venn: { type, section, boldWord, rest, circles: [{ label, body }], overlap }
 concentric: { type, section, boldWord, rest, rings: [{ label, body }] }
 matrix: { type, section, boldWord, rest, headers: [], rows: [[]] }
 timeline: { type, section, boldWord, rest, lanes: [{ label, events: [{ label, date, body }] }] }
-bar_chart: { type, section, headline, categories: [], series: [{ name, values: [] }] }
-line_chart: { type, section, headline, categories: [], series: [{ name, values: [] }] }
-pie_chart: { type, section, headline, slices: [{ label, value }] }
-doughnut_chart: { type, section, headline, slices: [{ label, value }] }
-horiz_bar_chart: { type, section, headline, categories: [], series: [{ name, values: [] }] }
-combo_chart: { type, section, headline, categories: [], bars: [{ name, values: [] }], lines: [{ name, values: [] }] }
+bar_chart: { type, section, headline, labels: [], series: [{ name, values: [] }] }
+line_chart: { type, section, headline, labels: [], series: [{ name, values: [] }] }
+pie_chart: { type, section, headline, chartData: [{ label, value }] }
+doughnut_chart: { type, section, headline, chartData: [{ label, value }] }
+horiz_bar_chart: { type, section, headline, labels: [], series: [{ name, values: [] }] }
+combo_chart: { type, section, headline, labels: [], barSeries: [{ name, values: [] }], lineSeries: [{ name, values: [] }] }
 image_panel: { type, section, boldWord, rest, body, imagePrompt, googleSearch }
 single_image: { type, section, boldWord, rest, body, imagePrompt, googleSearch }
 full_bleed_text: { type, section, headline, imagePrompt, googleSearch }
