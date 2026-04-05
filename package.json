@@ -1,0 +1,18 @@
+{
+  "name": "cme-online-hub",
+  "version": "1.0.0",
+  "description": "Collaborate Middle East PowerPoint Generator — Web Deployment",
+  "main": "cme_server.js",
+  "scripts": {
+    "start": "node cme_server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "@anthropic-ai/sdk": "^0.29.0",
+    "pptxgenjs": "^3.12.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
