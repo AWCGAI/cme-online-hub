@@ -364,24 +364,24 @@ function buildPptx(briefText) {
         `const OUTPUT_PATH = ${JSON.stringify(outputPath)}`
       );
 
-    // Replace the BRIEF object in-place so buildDeck (defined after it) stays intact.
-    // Find: const BRIEF = { ... }
-    // Replace up to (but not including) the buildDeck(BRIEF) call line.
-    const briefStart = source.indexOf('const BRIEF = ');
-    const callLine   = source.indexOf('\nbuildDeck(BRIEF)');
+    // Replace the BRIEF object in-place so buildDeck (defined AFTER it) stays intact.
+    // Splice point is the start of "async function buildDeck(" — NOT the buildDeck(BRIEF) call.
+    // This preserves: [engine] + [new BRIEF] + [buildDeck definition] + [buildDeck(BRIEF) call]
+    const briefStart       = source.indexOf('const BRIEF = ');
+    const buildDeckDefStart = source.indexOf('\nasync function buildDeck(', briefStart);
 
     if (briefStart === -1) {
       return reject(new Error('Could not find "const BRIEF" in cme_generator.js'));
     }
-    if (callLine === -1) {
-      return reject(new Error('Could not find "buildDeck(BRIEF)" call in cme_generator.js'));
+    if (buildDeckDefStart === -1) {
+      return reject(new Error('Could not find "async function buildDeck(" in cme_generator.js'));
     }
 
-    // Stitch: everything before BRIEF + new BRIEF + everything from buildDeck(BRIEF) onward
+    // Stitch: everything before BRIEF + new BRIEF + buildDeck definition onward
     const runner =
       source.slice(0, briefStart) +
       `const BRIEF = ${briefText};\n` +
-      source.slice(callLine + 1); // +1 skips the leading \n
+      source.slice(buildDeckDefStart + 1); // +1 skips the leading \n
 
     fs.writeFileSync(runnerPath, runner, 'utf8');
 
