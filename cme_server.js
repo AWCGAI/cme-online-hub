@@ -384,7 +384,11 @@ function buildPptx(briefText) {
     execFile('node', [runnerPath], {
       cwd: __dirname,
       timeout: 120000,
-      maxBuffer: 10 * 1024 * 1024
+      maxBuffer: 10 * 1024 * 1024,
+      env: {
+        ...process.env,
+        NODE_PATH: path.join(__dirname, 'node_modules')
+      }
     }, (err, stdout, stderr) => {
       // Always clean up runner
       try { fs.unlinkSync(runnerPath); } catch (_) {}
