@@ -418,6 +418,52 @@ function buildPptx(briefText) {
   });
 }
 
+// ── PPTX POST-PROCESSOR ───────────────────────────────────────────────────────
+// pptxgenjs writes <a:hlinkClick invalidUrl="" action="" tgtFrame="" ...>
+// for text hyperlinks. The empty invalidUrl="" attribute causes PowerPoint to
+// flag the file with a repair dialog (it treats any hlinkClick with invalidUrl
+// as a broken link). Strip it back to the minimal valid form: <a:hlinkClick r:id="..."/>
+async function fixHlinkClick(pptxPath) {
+  const JSZip = require('jszip');
+  const data   = fs.readFileSync(pptxPath);
+  const zip    = await JSZip.loadAsync(data);
+
+  const slideFiles = Object.keys(zip.files).filter(
+    n => /^ppt\/slides\/slide\d+\.xml$/.test(n)
+  );
+
+  for (const name of slideFiles) {
+    let xml = await zip.files[name].async('string');
+
+    // Strip junk attributes from hlinkClick opening tags that pptxgenjs adds:
+    // invalidUrl="" action="" tgtFrame="" history="1" highlightClick="0" endSnd="0"
+    // These empty/spurious attributes cause PowerPoint's repair dialog.
+    // Match the full opening tag (both self-closing /> and non-self-closing >).
+    xml = xml.replace(
+      /<a:hlinkClick([^>]*?)(\/??>)/g,
+      (match, attrs, close) => {
+        // Skip slide-jump links — leave them as-is
+        if (attrs.includes('ppaction://hlinksldjump')) return match;
+        const rId     = (attrs.match(/r:id="([^"]*)"/)    || [])[1] || '';
+        const tooltip = (attrs.match(/tooltip="([^"]*)"/) || [])[1] || '';
+        let out = `<a:hlinkClick r:id="${rId}"`;
+        if (tooltip) out += ` tooltip="${tooltip}"`;
+        out += close; // preserve the original close style (> or />)
+        return out;
+      }
+    );
+
+    zip.file(name, xml);
+  }
+
+  const fixed = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  fs.writeFileSync(pptxPath, fixed);
+}
+
 // ── GENERATE ENDPOINT (multipart + JSON fallback) ─────────────────────────────
 app.post('/generate', upload.array('files', 20), async (req, res) => {
 
@@ -458,6 +504,7 @@ app.post('/generate', upload.array('files', 20), async (req, res) => {
 
   try {
     outputPath = await buildPptx(briefText);
+    await fixHlinkClick(outputPath);
     console.log(`PPTX built: ${outputPath}`);
   } catch (err) {
     console.error('PPTX build failed:', err.message);
