@@ -435,21 +435,28 @@ async function fixHlinkClick(pptxPath) {
   for (const name of slideFiles) {
     let xml = await zip.files[name].async('string');
 
-    // Strip junk attributes from hlinkClick opening tags that pptxgenjs adds:
-    // invalidUrl="" action="" tgtFrame="" history="1" highlightClick="0" endSnd="0"
-    // These empty/spurious attributes cause PowerPoint's repair dialog.
-    // Match the full opening tag (both self-closing /> and non-self-closing >).
+    // pptxgenjs generates <a:hlinkClick> elements with two problems:
+    // 1. Spurious attributes: invalidUrl="" action="" tgtFrame="" history="1"
+    //    highlightClick="0" endSnd="0" — PowerPoint flags these as broken links.
+    // 2. An <a:extLst> child containing <ahyp:hlinkClr val="tx"/> — a colour
+    //    extension that triggers the repair dialog in some PowerPoint versions.
+    // Fix: reduce every hlinkClick to its minimal valid form: <a:hlinkClick r:id="..."/>
+    // First handle the non-self-closing form with children (includes extLst):
     xml = xml.replace(
-      /<a:hlinkClick([^>]*?)(\/??>)/g,
-      (match, attrs, close) => {
-        // Skip slide-jump links — leave them as-is
+      /<a:hlinkClick([^>]*?)>([\s\S]*?)<\/a:hlinkClick>/g,
+      (match, attrs) => {
+        if (attrs.includes('ppaction://hlinksldjump')) return match; // keep slide-jump links
+        const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
+        return `<a:hlinkClick r:id="${rId}"/>`;
+      }
+    );
+    // Then handle any remaining self-closing form:
+    xml = xml.replace(
+      /<a:hlinkClick([^/]*?)\/>/g,
+      (match, attrs) => {
         if (attrs.includes('ppaction://hlinksldjump')) return match;
-        const rId     = (attrs.match(/r:id="([^"]*)"/)    || [])[1] || '';
-        const tooltip = (attrs.match(/tooltip="([^"]*)"/) || [])[1] || '';
-        let out = `<a:hlinkClick r:id="${rId}"`;
-        if (tooltip) out += ` tooltip="${tooltip}"`;
-        out += close; // preserve the original close style (> or />)
-        return out;
+        const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
+        return `<a:hlinkClick r:id="${rId}"/>`;
       }
     );
 
