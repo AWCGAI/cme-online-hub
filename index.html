@@ -50,9 +50,9 @@
     }
 
     .header-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 6px;
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
       background: var(--amber);
       display: flex;
       align-items: center;
@@ -61,13 +61,20 @@
       cursor: pointer;
       border: none;
       padding: 0;
-      transition: background 0.2s, opacity 0.2s;
+      transition: background 0.2s, opacity 0.2s, transform 0.1s;
       text-decoration: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(0,0,0,0);
     }
 
     .header-icon:hover {
       background: var(--amber-dark);
       opacity: 0.9;
+    }
+
+    .header-icon:active {
+      background: var(--amber-dark);
+      transform: scale(0.94);
     }
 
     .header-titles {
@@ -595,7 +602,7 @@
 
   <!-- HEADER -->
   <header>
-    <button class="header-icon" onclick="goHome()" title="Back to start">
+    <button class="header-icon" onclick="goHome()" ontouchend="goHome(); event.preventDefault();" title="Back to start">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 18 9 12 15 6"/>
       </svg>
