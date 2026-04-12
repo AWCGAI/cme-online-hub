@@ -58,6 +58,16 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      transition: background 0.2s, opacity 0.2s;
+      text-decoration: none;
+    }
+
+    .header-icon:hover {
+      background: var(--amber-dark);
+      opacity: 0.9;
     }
 
     .header-titles {
@@ -585,11 +595,11 @@
 
   <!-- HEADER -->
   <header>
-    <div class="header-icon">
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-        <path d="M3 3L17 17M17 3L3 17" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+    <button class="header-icon" onclick="goHome()" title="Back to start">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
       </svg>
-    </div>
+    </button>
     <div class="header-titles">
       <div class="header-top">Presentation Generator &nbsp;&middot;&nbsp; Presentation Engine</div>
       <div class="header-sub">Upload a file or paste content &nbsp;&middot;&nbsp; Claude structures and designs &nbsp;&middot;&nbsp; Download branded .pptx</div>
@@ -666,13 +676,29 @@
     <!-- ── RIGHT PANEL ── -->
     <div class="panel-right" id="rightPanel">
 
-      <!-- Geometric watermark (CME X + star motif) -->
+      <!-- Mashrabiya watermark (Islamic geometric lattice) -->
       <div class="geo-watermark">
         <svg width="520" height="520" viewBox="0 0 520 520" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M80 80L440 440M440 80L80 440" stroke="#2A1A08" stroke-width="28" stroke-linecap="round"/>
-          <circle cx="260" cy="260" r="220" stroke="#2A1A08" stroke-width="6"/>
-          <circle cx="260" cy="260" r="160" stroke="#2A1A08" stroke-width="3"/>
-          <path d="M260 40 L280 160 L400 100 L320 200 L440 220 L320 260 L440 300 L320 320 L400 420 L280 360 L260 480 L240 360 L120 420 L200 320 L80 300 L200 260 L80 220 L200 200 L120 100 L240 160 Z" stroke="#2A1A08" stroke-width="3" fill="none"/>
+          <defs>
+            <pattern id="mashrabiya" width="100" height="100" patternUnits="userSpaceOnUse">
+              <!-- 8-pointed star (khatam) — outer radius 35, inner radius 14 -->
+              <polygon
+                points="50,15 55.7,36.1 74.7,25.3 63.9,44.3 85,50 63.9,55.7 74.7,74.7 55.7,63.9 50,85 44.3,63.9 25.3,74.7 36.1,55.7 15,50 36.1,44.3 25.3,25.3 44.3,36.1"
+                stroke="#2A1A08" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+              <!-- N/S axis bridges -->
+              <line x1="50" y1="15" x2="50" y2="0"   stroke="#2A1A08" stroke-width="1.8"/>
+              <line x1="50" y1="85" x2="50" y2="100" stroke="#2A1A08" stroke-width="1.8"/>
+              <!-- E/W axis bridges -->
+              <line x1="85"  y1="50" x2="100" y2="50" stroke="#2A1A08" stroke-width="1.8"/>
+              <line x1="15"  y1="50" x2="0"   y2="50" stroke="#2A1A08" stroke-width="1.8"/>
+              <!-- Diagonal bridges to adjacent tile corners -->
+              <line x1="74.7" y1="25.3" x2="100" y2="0"   stroke="#2A1A08" stroke-width="1.8"/>
+              <line x1="74.7" y1="74.7" x2="100" y2="100" stroke="#2A1A08" stroke-width="1.8"/>
+              <line x1="25.3" y1="74.7" x2="0"   y2="100" stroke="#2A1A08" stroke-width="1.8"/>
+              <line x1="25.3" y1="25.3" x2="0"   y2="0"   stroke="#2A1A08" stroke-width="1.8"/>
+            </pattern>
+          </defs>
+          <rect width="520" height="520" fill="url(#mashrabiya)"/>
         </svg>
       </div>
 
@@ -896,6 +922,23 @@
       } finally {
         btn.disabled = false;
       }
+    }
+
+    // ── GO HOME ──────────────────────────────────────────────────────
+    function goHome() {
+      // Reset form state and hide progress overlay
+      selectedFiles = [];
+      renderFileList();
+      document.getElementById('filenameInput').value = '';
+      document.getElementById('contentTextarea').value = '';
+      document.getElementById('progressOverlay').classList.remove('visible');
+      document.getElementById('defaultContent').classList.remove('hidden');
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('errorDetail').className = 'error-detail';
+      document.getElementById('statusMsg').textContent = '';
+      document.getElementById('statusMsg').className = 'status-msg';
+      resetSteps();
+      window.scrollTo(0, 0);
     }
 
     // Cmd/Ctrl+Enter shortcut
