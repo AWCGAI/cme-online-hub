@@ -445,8 +445,12 @@ async function fixHlinkClick(pptxPath) {
     xml = xml.replace(
       /<a:hlinkClick([^>]*?)>([\s\S]*?)<\/a:hlinkClick>/g,
       (match, attrs) => {
-        if (attrs.includes('ppaction://hlinksldjump')) return match; // keep slide-jump links
         const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
+        if (attrs.includes('ppaction://hlinksldjump')) {
+          // Slide-jump links must keep their action attr, but strip extLst children
+          // (ahyp:hlinkClr inside extLst triggers the repair dialog)
+          return `<a:hlinkClick r:id="${rId}" action="ppaction://hlinksldjump"/>`;
+        }
         return `<a:hlinkClick r:id="${rId}"/>`;
       }
     );
@@ -454,8 +458,10 @@ async function fixHlinkClick(pptxPath) {
     xml = xml.replace(
       /<a:hlinkClick([^/]*?)\/>/g,
       (match, attrs) => {
-        if (attrs.includes('ppaction://hlinksldjump')) return match;
         const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
+        if (attrs.includes('ppaction://hlinksldjump')) {
+          return `<a:hlinkClick r:id="${rId}" action="ppaction://hlinksldjump"/>`;
+        }
         return `<a:hlinkClick r:id="${rId}"/>`;
       }
     );
