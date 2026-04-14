@@ -443,7 +443,7 @@ async function fixHlinkClick(pptxPath) {
     // Fix: reduce every hlinkClick to its minimal valid form: <a:hlinkClick r:id="..."/>
     // First handle the non-self-closing form with children (includes extLst):
     xml = xml.replace(
-      /<a:hlinkClick([^>]*?)>([\s\S]*?)<\/a:hlinkClick>/g,
+      /<a:hlinkClick([^>]*?)(?<!\/)>([\s\S]*?)<\/a:hlinkClick>/g,
       (match, attrs) => {
         const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
         if (attrs.includes('ppaction://hlinksldjump')) {
@@ -456,7 +456,7 @@ async function fixHlinkClick(pptxPath) {
     );
     // Then handle any remaining self-closing form:
     xml = xml.replace(
-      /<a:hlinkClick([^/]*?)\/>/g,
+      /<a:hlinkClick([^>]*?)\/>/g,
       (match, attrs) => {
         const rId = (attrs.match(/r:id="([^"]*)"/) || [])[1] || '';
         if (attrs.includes('ppaction://hlinksldjump')) {
