@@ -186,9 +186,27 @@ DESIGN RULES:
 - Vary slide types — no two consecutive slides of the same type
 - Use diagram slides (flow_diagram, process_flow, venn, strategy_pillars) for processes/frameworks
 - Use key_stats or chart slides whenever there are numbers
-- Use image_panel or full_bleed_caption to break up sections
 - contents items must have divider keys matching exactly the title of their section dividers
 - Write in third person about Collaborate Middle East. Use British English.
+
+VISUAL-FIRST RULES:
+- Collaborate Middle East is a visual experiential agency — every deck must feel like a creative company made it. Aim for at least 40% visual slides (full_bleed, image_panel, single_image, two_images, four_image_grid, mood_board, case_study, case_study_hero, phone_landscape, ipad_video, device_mockup, full_bleed_caption).
+- Never run more than 3 consecutive text or diagram slides — break with a visual slide.
+- Use full_bleed at slide 2 or 3 AND at the opening of every major section.
+- Use mood_board or four_image_grid for any creative, brand, campaign, or inspiration section.
+- Use case_study or case_study_hero whenever client work, project results, or case examples appear.
+- FILM SLIDES: Include ipad_video and phone_landscape whenever there is any reasonable possibility that moving image would support the storytelling — a campaign, brand activation, event, case study, digital product, social content. Always include both together as a pair: ipad_video for 4:3 content, phone_landscape for 16:9 social or mobile. Label them 'Film placeholder — replace with your video content' when used as placeholders.
+
+IMAGE PROMPTS — quality is critical. Write every imagePrompt as 4-6 sentences covering ALL of:
+1. Subject: exactly who or what is shown in precise visual terms
+2. Setting: the specific environment, location, or backdrop (Middle East / GCC context where appropriate)
+3. Mood and atmosphere: the emotional tone, energy, and feeling of the image
+4. Lighting and colour palette: quality of light, temperature, dominant tones and hues
+5. Camera angle and composition: wide shot / close-up / overhead, framing approach
+6. Story connection: how this specific image supports the slide content and section narrative
+BAD imagePrompt: 'Corporate event, professional, bright lighting'
+GOOD imagePrompt: 'A luxury brand activation space inside a gleaming Riyadh exhibition hall during Saudi National Day, filled with visitors exploring an immersive light installation. The mood is celebratory and premium — warm amber spotlights contrast with cool architectural white surfaces, with the Saudi skyline visible through floor-to-ceiling glass. Shot from a wide elevated angle, the space communicates scale and aspiration. The image supports the Brand Activations section, visualising the kind of culturally resonant, high-production experience Collaborate Middle East delivers.'
+googleSearch must be specific: site:unsplash.com + precise subject + style + context keywords
 
 ${SLIDE_SCHEMA}
 
