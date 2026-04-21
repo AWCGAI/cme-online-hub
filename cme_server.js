@@ -331,7 +331,9 @@ async function generateBrief(userContent) {
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4096,
+    // Raised from 4096 to 16384: substantive briefs (17+ slides) overflowed 4k tokens
+    // and the JSON came back truncated mid-object, failing eval with "Unexpected token ')'".
+    max_tokens: 16384,
     system: SYSTEM_PROMPT,
     messages: [{
       role: 'user',
@@ -340,6 +342,14 @@ async function generateBrief(userContent) {
   });
 
   let text = response.content[0].text.trim();
+
+  // Detect Haiku truncation explicitly — gives a better error than JS parser salad
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Haiku hit the max_tokens ceiling before finishing the BRIEF — response is truncated. ` +
+      `Try shorter source content or raise max_tokens above 16384.`
+    );
+  }
 
   // Strip any code fences if the model ignored instructions
   if (text.startsWith('```')) {
