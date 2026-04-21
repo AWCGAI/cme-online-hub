@@ -235,6 +235,114 @@
       color: #333;
       text-align: center;
     }
+
+    /* ── PowerPoint Image Bank ─────────────────────────────────────────── */
+    .mb-section {
+      display: none;
+      margin-top: 40px;
+      padding: 24px;
+      background: #111;
+      border: 1px solid #1e1e1e;
+      border-radius: 12px;
+    }
+    .mb-section.visible { display: block; }
+    .mb-section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .mb-section h2 em { font-style: normal; color: #C4943A; }
+    .mb-section .subtitle { margin-bottom: 18px; }
+    .mb-styles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .mb-style-chip {
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid #333;
+      background: #0a0a0a;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .mb-style-chip:hover { border-color: #C4943A; color: #C4943A; }
+    .mb-style-chip.active {
+      background: #C4943A;
+      border-color: #C4943A;
+      color: #0a0a0a;
+      font-weight: 600;
+    }
+    .mb-controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .mb-controls select {
+      height: 40px;
+      padding: 0 12px;
+      background: #0a0a0a;
+      border: 1px solid #222;
+      color: #e0e0e0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .mb-controls button {
+      height: 40px;
+      padding: 0 20px;
+      font-size: 13px;
+    }
+    #mbStatus {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 12px;
+      min-height: 16px;
+    }
+    #mbStatus.error { color: #ff6b6b; }
+    .mb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .mb-tile {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0a0a0a;
+      border: 1px solid #1e1e1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #444;
+      text-align: center;
+      padding: 12px;
+    }
+    .mb-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .mb-tile.failed {
+      color: #ff6b6b;
+      font-size: 10px;
+    }
+    .mb-download-row {
+      margin-top: 18px;
+      display: none;
+    }
+    .mb-download-row.visible { display: block; }
   </style>
 </head>
 <body>
@@ -292,6 +400,38 @@
         </div>
         <div class="error-detail" id="errorDetail"></div>
       </div>
+
+      <!-- ── PowerPoint Image Bank ─────────────────────────────────────── -->
+      <section class="mb-section" id="mbSection">
+        <h2>PowerPoint <em>Image Bank</em></h2>
+        <p class="subtitle">Generate AI images from your document content to use as visual references or slide imagery.</p>
+        <div class="mb-styles" id="mbStyles">
+          <span class="mb-style-chip" data-style="Editorial Photography">Editorial Photography</span>
+          <span class="mb-style-chip" data-style="Cinematic">Cinematic</span>
+          <span class="mb-style-chip" data-style="Aerial / Drone">Aerial / Drone</span>
+          <span class="mb-style-chip" data-style="Abstract">Abstract</span>
+          <span class="mb-style-chip" data-style="Minimalist">Minimalist</span>
+          <span class="mb-style-chip" data-style="Architectural">Architectural</span>
+          <span class="mb-style-chip" data-style="Nature / Landscape">Nature / Landscape</span>
+          <span class="mb-style-chip" data-style="Studio / Product">Studio / Product</span>
+          <span class="mb-style-chip" data-style="Documentary">Documentary</span>
+          <span class="mb-style-chip" data-style="Illustration">Illustration</span>
+        </div>
+        <div class="mb-controls">
+          <select id="mbCount">
+            <option value="5">5 images</option>
+            <option value="10">10 images</option>
+            <option value="15" selected>15 images</option>
+            <option value="20">20 images</option>
+          </select>
+          <button id="mbGenerateBtn" onclick="startMoodboard()">Generate Image Bank</button>
+        </div>
+        <div id="mbStatus"></div>
+        <div class="mb-grid" id="mbGrid"></div>
+        <div class="mb-download-row" id="mbDownloadRow">
+          <button onclick="downloadMoodboard()">Download all as ZIP</button>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -387,6 +527,10 @@
         statusMsg.textContent = 'Download complete.';
         statusMsg.className = 'status success';
 
+        // Reveal Image Bank section now that the deck has generated
+        window._mbDocText = content;
+        document.getElementById('mbSection').classList.add('visible');
+
       } catch (err) {
         // Mark current active step as failed
         for (let i = 1; i <= 4; i++) {
@@ -407,6 +551,116 @@
     document.getElementById('content').addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') generate();
     });
+
+    // ── PowerPoint Image Bank ───────────────────────────────────────────
+    let _mbJobId = null;
+    let _mbPollTimer = null;
+
+    // Wire up style chip toggling
+    document.querySelectorAll('#mbStyles .mb-style-chip').forEach(chip => {
+      chip.addEventListener('click', () => chip.classList.toggle('active'));
+    });
+
+    function _getSelectedStyles() {
+      return [...document.querySelectorAll('#mbStyles .mb-style-chip.active')]
+        .map(c => c.dataset.style);
+    }
+
+    async function startMoodboard() {
+      const text = (window._mbDocText || document.getElementById('content').value || '').trim();
+      if (!text) {
+        _mbSetStatus('No document content available — generate a deck first.', true);
+        return;
+      }
+      const count = parseInt(document.getElementById('mbCount').value) || 15;
+      const styles = _getSelectedStyles();
+      const btn = document.getElementById('mbGenerateBtn');
+      const grid = document.getElementById('mbGrid');
+      const downloadRow = document.getElementById('mbDownloadRow');
+
+      btn.disabled = true;
+      grid.innerHTML = '';
+      downloadRow.classList.remove('visible');
+      _mbSetStatus('Starting image generation…');
+
+      try {
+        const response = await fetch(API_BASE + '/generate-moodboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, count, styles })
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Server error ' + response.status);
+        }
+        const data = await response.json();
+        _mbJobId = data.jobId;
+        // Pre-render empty tiles
+        for (let i = 0; i < count; i++) {
+          const tile = document.createElement('div');
+          tile.className = 'mb-tile';
+          tile.id = 'mbTile_' + i;
+          tile.textContent = 'Pending…';
+          grid.appendChild(tile);
+        }
+        pollMoodboard();
+      } catch (err) {
+        _mbSetStatus('Failed to start: ' + err.message, true);
+        btn.disabled = false;
+      }
+    }
+
+    async function pollMoodboard() {
+      if (!_mbJobId) return;
+      try {
+        const response = await fetch(API_BASE + '/moodboard-status/' + _mbJobId);
+        if (!response.ok) throw new Error('Status check failed (' + response.status + ')');
+        const job = await response.json();
+
+        _mbSetStatus(job.done ? ('Complete — ' + job.imageCount + '/' + job.total + ' images') : job.phase);
+
+        // Refresh tiles that now have images available
+        job.images.forEach((img, i) => {
+          const tile = document.getElementById('mbTile_' + i);
+          if (!tile || tile.classList.contains('done')) return;
+          if (img.hasImage) {
+            tile.innerHTML = '';
+            const el = document.createElement('img');
+            el.src = API_BASE + '/moodboard-image/' + _mbJobId + '/' + i;
+            el.alt = img.label || '';
+            tile.appendChild(el);
+            tile.classList.add('done');
+          } else if (img.error) {
+            tile.classList.add('failed');
+            tile.textContent = (img.label || 'Image ' + (i+1)) + ' — failed';
+          }
+        });
+
+        if (job.done) {
+          document.getElementById('mbGenerateBtn').disabled = false;
+          if (job.imageCount > 0 && job.images.some(img => img.hasImage)) {
+            document.getElementById('mbDownloadRow').classList.add('visible');
+          }
+          if (job.error) _mbSetStatus('Error: ' + job.error, true);
+          return;
+        }
+        _mbPollTimer = setTimeout(pollMoodboard, 2500);
+      } catch (err) {
+        _mbSetStatus('Polling error: ' + err.message, true);
+        document.getElementById('mbGenerateBtn').disabled = false;
+      }
+    }
+
+    function downloadMoodboard() {
+      if (!_mbJobId) return;
+      window.location.href = API_BASE + '/moodboard-download/' + _mbJobId;
+    }
+
+    function _mbSetStatus(msg, isError) {
+      const s = document.getElementById('mbStatus');
+      s.textContent = msg || '';
+      s.className = isError ? 'error' : '';
+    }
   </script>
 
 </body>

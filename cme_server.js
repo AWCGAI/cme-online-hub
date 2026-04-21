@@ -554,6 +554,106 @@ app.post('/generate', upload.array('files', 20), async (req, res) => {
   });
 });
 
+// ── POWERPOINT IMAGE BANK (mood board generator) ─────────────────────────────
+// Uses Claude Haiku to generate prompts from the document, then OpenAI gpt-image-1
+// to render them. Jobs are held in memory for 30 minutes.
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+async function generateImageOpenAI(prompt, ratio) {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set");
+  // gpt-image-1 only accepts 1024x1024, 1024x1536, 1536x1024, or auto.
+  // DALL-E 3 sizes (1792x1024, 1344x1024) fail with a 400.
+  // 1536x1024 (3:2) is the closest supported landscape for 16:9 and 4:3 briefs.
+  const dims = {"16:9":{w:1536,h:1024},"4:3":{w:1536,h:1024},"1:1":{w:1024,h:1024}}[ratio] || {w:1536,h:1024};
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "Authorization": "Bearer " + OPENAI_API_KEY},
+    body: JSON.stringify({model:"gpt-image-1",prompt:prompt,n:1,size:dims.w+"x"+dims.h,quality:"high",output_format:"png"})
+  });
+  if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error("OpenAI API error " + response.status + ": " + (err.error?.message || response.statusText)); }
+  const data = await response.json();
+  const b64 = data.data?.[0]?.b64_json;
+  if (!b64) throw new Error("OpenAI returned no image data");
+  return b64;
+}
+
+const moodboardJobs = new Map();
+setInterval(() => { const cutoff = Date.now() - 30*60*1000; for (const [id,job] of moodboardJobs) { if (job.startedAt < cutoff) moodboardJobs.delete(id); } }, 5*60*1000);
+
+app.post("/generate-moodboard", async (req, res) => {
+  const { text, instructions, count, styles } = req.body || {};
+  if (!text || !text.trim()) return res.status(400).json({ error: "No document text provided." });
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: "ANTHROPIC_API_KEY not set on server." });
+  const imageCount = Math.min(Math.max(parseInt(count) || 15, 3), 20);
+  const selectedStyles = Array.isArray(styles) ? styles.filter(s => typeof s === "string").slice(0, 10) : [];
+  const jobId = "mb_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  const job = { id: jobId, startedAt: Date.now(), done: false, error: null, progress: 0, total: imageCount, phase: "generating_prompts", images: [] };
+  moodboardJobs.set(jobId, job);
+  res.json({ jobId });
+  (async () => {
+    try {
+      const promptInstruction = instructions ? 'The user also provided these instructions: "' + instructions.slice(0, 500) + '"' : "";
+      const styleInstruction = selectedStyles.length > 0 ? '\nThe user selected these visual styles: ' + selectedStyles.join(", ") + '. Distribute these styles intelligently across the images.' : "";
+      const promptRequest = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","x-api-key":ANTHROPIC_API_KEY,"anthropic-version":"2023-06-01"},
+        body: JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4000,messages:[{role:"user",content:'You are creating a mood board of AI-generated images for a professional presentation.\n\nAnalyse this document content and generate exactly ' + imageCount + ' image prompts that would complement a presentation based on this material.\n\nEach prompt should:\n- Be a detailed visual description suitable for AI image generation (2-3 sentences)\n- Cover a different theme, concept or section from the document\n- Use a professional, editorial photography or cinematic style\n- Avoid text, logos, watermarks or UI elements in the description\n- Be suitable for a premium corporate presentation\n\n' + promptInstruction + styleInstruction + '\n\nDOCUMENT CONTENT:\n' + text.slice(0, 12000) + '\n\nReturn ONLY a JSON array of objects, each with "label" (short 3-5 word theme title) and "prompt" (the full image generation prompt). Return exactly ' + imageCount + ' items. JSON only, no other text.'}]})
+      });
+      if (!promptRequest.ok) throw new Error("Failed to generate image prompts - Claude API error " + promptRequest.status);
+      const promptResult = await promptRequest.json();
+      const promptText = promptResult.content?.find(b => b.type === "text")?.text || "";
+      let prompts;
+      try { const match = promptText.match(/\[[\s\S]*\]/); if (!match) throw new Error("No JSON array found"); prompts = JSON.parse(match[0]); if (!Array.isArray(prompts) || prompts.length === 0) throw new Error("Empty array"); } catch (parseErr) { throw new Error("Could not parse image prompts from Claude: " + parseErr.message); }
+      prompts = prompts.slice(0, imageCount);
+      job.total = prompts.length;
+      job.phase = "generating_images";
+      console.log("[MoodBoard] " + jobId + ": Generated " + prompts.length + " prompts, starting image generation");
+      for (let i = 0; i < prompts.length; i++) {
+        const { label, prompt } = prompts[i];
+        job.progress = i;
+        job.phase = "Generating image " + (i+1) + "/" + prompts.length + ": " + label;
+        try { console.log("[MoodBoard] " + jobId + ": Generating " + (i+1) + "/" + prompts.length + " - " + label); const base64 = await generateImageOpenAI(prompt, "16:9"); job.images.push({ label, prompt, base64 }); }
+        catch (imgErr) { console.warn("[MoodBoard] " + jobId + ": Image " + (i+1) + " failed: " + imgErr.message); job.images.push({ label, prompt, base64: null, error: imgErr.message }); }
+      }
+      job.progress = prompts.length; job.done = true; job.phase = "complete";
+      console.log("[MoodBoard] " + jobId + ": Complete - " + job.images.filter(i => i.base64).length + "/" + prompts.length + " images generated");
+    } catch (err) { console.error("[MoodBoard] " + jobId + ": Fatal error: " + err.message); job.done = true; job.error = err.message; job.phase = "error"; }
+  })();
+});
+
+app.get("/moodboard-status/:jobId", (req, res) => {
+  const job = moodboardJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  res.json({ done: job.done, error: job.error, progress: job.progress, total: job.total, phase: job.phase, imageCount: job.images.length, images: job.images.map(img => ({ label: img.label, prompt: img.prompt, hasImage: !!img.base64, error: img.error || null })) });
+});
+
+app.get("/moodboard-image/:jobId/:index", (req, res) => {
+  const job = moodboardJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  const idx = parseInt(req.params.index);
+  const img = job.images[idx];
+  if (!img || !img.base64) return res.status(404).json({ error: "Image not found" });
+  const buf = Buffer.from(img.base64, "base64");
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Content-Length", buf.length);
+  res.end(buf);
+});
+
+app.get("/moodboard-download/:jobId", async (req, res) => {
+  const job = moodboardJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  if (!job.done) return res.status(400).json({ error: "Job still in progress" });
+  const JSZip = require("jszip");
+  const zip = new JSZip();
+  job.images.forEach((img, i) => { if (!img.base64) return; const safeName = (img.label || "image").replace(/[^a-zA-Z0-9_\- ]/g, "").slice(0, 40); zip.file(String(i+1).padStart(2,"0") + "_" + safeName + ".png", img.base64, { base64: true }); });
+  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", 'attachment; filename="CME_MoodBoard.zip"');
+  res.setHeader("Content-Length", zipBuffer.length);
+  res.end(zipBuffer);
+});
+
 // ── START ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`CME Online Hub running on port ${PORT}`);
@@ -561,5 +661,8 @@ app.listen(PORT, () => {
   console.log(`Generator: ${GENERATOR_PATH}`);
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn('WARNING: ANTHROPIC_API_KEY is not set');
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('WARNING: OPENAI_API_KEY is not set — Image Bank feature will be unavailable');
   }
 });

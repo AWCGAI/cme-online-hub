@@ -164,10 +164,13 @@ function addFullBleedSlide(pres, data) {
     slide.addImage({ data: data.image, x: 0, y: 0, w: W, h: H,
       sizing: { type: "cover", w: W, h: H } });
   } else {
-    // Placeholder — dark grey so white text is readable
-    slide.addShape(pres.ShapeType.rect, {
+    // Placeholder — use the grey gradient IMAGE (img_placeholder.png) rather than
+    // a filled shape. An image placeholder lets the user right-click and choose
+    // "Replace Image from Clipboard" in PowerPoint. A shape has no equivalent action.
+    slide.addImage({
+      data: imgPlaceholder,
       x: 0, y: 0, w: W, h: H,
-      fill: { color: "2A2A2A" }, line: { color: "2A2A2A" }
+      sizing: { type: "cover", w: W, h: H }
     });
     // Print image guidance to console for the user
     const ratio   = data.imageRatio || "16:9";
@@ -178,14 +181,17 @@ function addFullBleedSlide(pres, data) {
     console.log(`  ChatGPT prompt: "${prompt}"`);
     console.log(`  Google search:  ${google}\n`);
 
-    // Show guidance text on the placeholder itself
+    // Magenta guidance text — high contrast against the grey gradient and
+    // clearly signals "delete me before shipping the deck".
+    const M_FB  = "EC4899";
+    const gUrl  = googleImagesUrl(google);
     slide.addText([
-      { text: "IMAGE PLACEHOLDER\n", options: { bold: true, fontSize: 14, color: C.white } },
-      { text: `Ratio: ${ratio}\n\n`, options: { fontSize: 11, color: C.white } },
-      { text: `ChatGPT prompt:\n`, options: { bold: true, fontSize: 10, color: C.white } },
-      { text: `${prompt}\n\n`, options: { fontSize: 10, color: C.white, italic: true } },
-      { text: `Google search:\n`, options: { bold: true, fontSize: 10, color: C.white } },
-      { text: google, options: { fontSize: 10, color: C.white, italic: true } }
+      { text: "IMAGE PLACEHOLDER\n", options: { bold: true, fontSize: 14, color: M_FB } },
+      { text: `Ratio: ${ratio}\n\n`, options: { fontSize: 11, color: M_FB } },
+      { text: `ChatGPT prompt:\n`, options: { bold: true, fontSize: 10, color: M_FB } },
+      { text: `${prompt}\n\n`, options: { fontSize: 10, color: M_FB, italic: true } },
+      { text: `Google Images — click to open:\n`, options: { bold: true, fontSize: 10, color: M_FB } },
+      { text: google, options: { fontSize: 10, color: M_FB, italic: true, hyperlink: { url: gUrl } } }
     ], {
       x: 4.0, y: 1.5, w: 5.0, h: 4.5,
       fontFace: FONT, valign: "top", margin: 0
@@ -1157,13 +1163,15 @@ function addContentsSlide(pres, data) {
       line: { color: C.dark, width: 0.5 }
     });
 
-    // Section name with hyperlink
+    // Section name — plain black text. No hyperlink, no underline.
+    // Hyperlinks removed because PowerPoint's theme overrides pptxgenjs hyperlink
+    // colour (text rendered blue no matter what we set). Underline also dropped
+    // since it's only meaningful when a link is attached.
     const labelOpts = {
       x, y: y + 0.06, w: lineW - 0.9, h: rowH - 0.08,
       fontSize: 13, fontFace: FONT, color: C.dark,
       valign: "middle", margin: 0
     };
-    if (item.pageRef) labelOpts.hyperlink = { slide: item.pageRef };
     slide.addText(item.label, labelOpts);
 
     // Sequential ordinal number — 01, 02, 03 ... independent of actual page
@@ -2197,9 +2205,24 @@ function addProcessFlowSlide(pres, data) {
       align: "center", valign: "top", margin: 0
     });
 
-    // Sub-label below spine — ghost pill
+    // Sub-label below spine — ghost pill, PROCEDURAL width AND height.
+    // Longer sub text wraps inside the pill and the pill grows vertically.
+    // Line cap: 2 when a phase label is present (to leave room), 3 otherwise.
     if (step.sub) {
-      addGhostPill(slide, step.sub, sx - 0.75, lineY + 0.32, 1.5, 0.26, acc, 8);
+      const maxPillW = stepW - 0.2;
+      const minPillW = 1.2;
+      // Approx chars per line at 8pt inside the pill (~0.068" per char average)
+      const charsPerLine = Math.max(10, Math.floor(maxPillW / 0.068));
+      const textLen = (step.sub || "").length;
+      const maxLines = step.phase ? 2 : 3;
+      const lineCount = Math.min(maxLines, Math.max(1, Math.ceil(textLen / charsPerLine)));
+      // Single-line pills fit to content; multi-line pills expand to max width
+      const pillW = lineCount > 1
+        ? maxPillW
+        : Math.min(Math.max(textLen * 0.068 + 0.3, minPillW), maxPillW);
+      // Height grows 0.17" per line plus 0.08" padding — minimum 0.26"
+      const pillH = Math.max(0.26, 0.17 * lineCount + 0.08);
+      addGhostPill(slide, step.sub, sx - pillW / 2, lineY + 0.32, pillW, pillH, acc, 8);
     }
 
     // Phase label bottom
@@ -2622,11 +2645,20 @@ function addFullBleedCaptionSlide(pres, data) {
   addSectionLabel(slide, data.section || "", { white: true });
 
   // White caption box — DYNAMIC height based on content
-  // Minimum height fits headline; expands if subcaption is also present
+  // Grows upward to accommodate the headline (incl. auto-wrapped lines) and subcaption.
   const capW   = data.captionWidth || 5.5;
   const capX   = 0;
   const lineHt  = 0.52;   // approx height per line at 22pt
-  const hlLines = data.headline ? data.headline.split("\n").length : 0;
+  // Count wrapped lines too — previously only explicit \n was counted, so long single-line
+  // headlines overflowed the box and spilled onto the dark image below ("water flow" bug).
+  // 22pt bold sans-serif averages ~0.14" per character; estimate chars-per-line from
+  // the box's effective text width, then sum wrapped line counts across any \n-split segments.
+  const effectiveTextW = capW - ML - 0.2;
+  const charsPerLine   = Math.max(10, Math.floor(effectiveTextW / 0.14));
+  const rawSegments    = String(data.headline || "").split("\n");
+  const hlLines = Math.max(1, rawSegments.reduce(function(sum, seg) {
+    return sum + Math.max(1, Math.ceil(seg.length / charsPerLine));
+  }, 0));
   const hasSubcap = !!data.subcaption;
   // Dynamic: top padding 0.22" + headline lines + gap + subcaption if present + bottom padding 0.22"
   const capH   = 0.22 + (hlLines * lineHt) + (hasSubcap ? 0.18 + 0.38 : 0) + 0.22;
